@@ -12542,6 +12542,7 @@ pthread_t *gpioStartThread(gpioThreadFunc_t f, void *userdata)
 {
    pthread_t *pth;
    pthread_attr_t pthAttr;
+   struct sched_param param;
 
    DBG(DBG_USER, "f=%08"PRIXPTR", userdata=%08"PRIXPTR, (uintptr_t)f, (uintptr_t)userdata);
 
@@ -12561,6 +12562,27 @@ pthread_t *gpioStartThread(gpioThreadFunc_t f, void *userdata)
       {
          free(pth);
          SOFT_ERROR(NULL, "pthread_attr_setstacksize failed");
+      }
+
+      /* Set scheduler policy and priority of pthread */
+      if (pthread_attr_setschedpolicy(&pthAttr, SCHED_FIFO))
+      {
+         free(pth);
+         SOFT_ERROR(NULL, "pthread_attr_setschedpolicy failed");
+      }
+      // IRQs in PREEMPT_RT are threaded with SCHED_FIFO and priority 50
+      param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+      if (pthread_attr_setschedparam(&pthAttr, &param))
+      {
+         free(pth);
+         SOFT_ERROR(NULL, "pthread_attr_setschedparam failed");
+      }
+
+      /* Use scheduling parameters of pthAttr */
+      if (pthread_attr_setinheritsched(&pthAttr, PTHREAD_EXPLICIT_SCHED))
+      {
+         free(pth);
+         SOFT_ERROR(NULL, "pthread_attr_setinheritsched failed");
       }
 
       if (pthread_create(pth, &pthAttr, f, userdata))
